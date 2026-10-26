@@ -14,9 +14,16 @@ final class SoundEngine {
     private let eq = AVAudioUnitEQ(numberOfBands: 2)
     private let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: 2)!
 
-    private struct Voice {
+    /// A varispeed resamples continuously whether or not anything is playing
+    /// (and even at rate 1.0): 20 of them cost ~9% of a core while idle.
+    /// Each voice's varispeed is bypassed while silent and only switched in
+    /// for the duration of a keystroke.
+    private final class Voice {
         let player = AVAudioPlayerNode()
         let varispeed = AVAudioUnitVarispeed()
+        /// Bumped per scheduled buffer so a stale completion (from a buffer
+        /// that was interrupted by a newer one) doesn't bypass a live sound.
+        var generation = 0
     }
 
     private var voices: [Voice] = []
@@ -62,6 +69,7 @@ final class SoundEngine {
             engine.attach(v.varispeed)
             engine.connect(v.player, to: v.varispeed, format: format)
             engine.connect(v.varispeed, to: submix, format: format)
+            v.varispeed.bypass = true
             voices.append(v)
         }
         engine.mainMixerNode.outputVolume = volume
@@ -233,9 +241,18 @@ final class SoundEngine {
         let voice = voices[nextVoice]
         nextVoice = (nextVoice + 1) % voiceCount
         voice.varispeed.rate = pow(2, cents / 1_200)
+        voice.varispeed.bypass = false
         voice.player.pan = pan
         voice.player.volume = gain
-        voice.player.scheduleBuffer(buffer, at: nil, options: .interrupts)
+        voice.generation &+= 1
+        let generation = voice.generation
+        voice.player.scheduleBuffer(buffer, at: nil, options: .interrupts,
+                                    completionCallbackType: .dataPlayedBack) { [weak voice] _ in
+            DispatchQueue.main.async {
+                guard let voice, voice.generation == generation else { return }
+                voice.varispeed.bypass = true
+            }
+        }
         if !voice.player.isPlaying { voice.player.play() }
     }
 
