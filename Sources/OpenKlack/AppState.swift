@@ -15,7 +15,21 @@ final class AppState: ObservableObject {
     // MARK: - Persisted settings
 
     @Published var enabled: Bool {
-        didSet { defaults.set(enabled, forKey: "enabled") }
+        didSet {
+            defaults.set(enabled, forKey: "enabled")
+            if enabled {
+                do {
+                    try engine.start()
+                    if outputDeviceUID != nil || outputChangedWhileDisabled {
+                        applyOutputDevice()
+                    }
+                } catch {
+                    klog.error("engine start failed: \(error, privacy: .public)")
+                }
+            } else {
+                engine.stop()
+            }
+        }
     }
     @Published var volume: Float {
         didSet {
@@ -88,6 +102,10 @@ final class AppState: ObservableObject {
             applyOutputDevice()
         }
     }
+    /// A picker change made while sounds are off is applied on re-enable;
+    /// otherwise switching back to System Default while muted would leave
+    /// the engine on the previously pinned device.
+    private var outputChangedWhileDisabled = false
 
     // MARK: - Stats
 
@@ -127,6 +145,7 @@ final class AppState: ObservableObject {
         totalKeystrokes = defaults.integer(forKey: "statsTotal")
         todayKeystrokes = defaults.integer(forKey: "statsToday")
         todayStamp = defaults.string(forKey: "statsTodayStamp") ?? ""
+        rollOverDayIfNeeded()
     }
 
     // MARK: - Lifecycle
@@ -138,15 +157,17 @@ final class AppState: ObservableObject {
         engine.setTone(x: toneX, y: toneY)
         applyPack(notify: false)
         engine.loadExtras(from: Self.soundsDirectory().appendingPathComponent("_extras"))
-        do {
-            try engine.start()
-        } catch {
-            klog.error("engine start failed: \(error, privacy: .public)")
-        }
-        // Only pin an output device when one is explicitly saved; default
-        // routing follows the system output on its own.
-        if outputDeviceUID != nil {
-            applyOutputDevice()
+        if enabled {
+            do {
+                try engine.start()
+            } catch {
+                klog.error("engine start failed: \(error, privacy: .public)")
+            }
+            // Only pin an output device when one is explicitly saved; default
+            // routing follows the system output on its own.
+            if outputDeviceUID != nil {
+                applyOutputDevice()
+            }
         }
 
         // NSEvent monitor callbacks arrive on the main thread already; calling
@@ -157,6 +178,11 @@ final class AppState: ObservableObject {
         accessibilityTrusted = Permissions.requestIfNeeded()
         listener.start()
         reconcileLoginItem()
+        NotificationCenter.default.addObserver(
+            forName: .NSCalendarDayChanged, object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.rollOverDayIfNeeded()
+        }
         klog.notice("startup: trusted=\(self.accessibilityTrusted, privacy: .public) packs=\(self.packs.count, privacy: .public) device=\(self.outputDeviceUID ?? "default", privacy: .public)")
 
         // Monitors registered before the Accessibility grant never deliver
@@ -292,13 +318,19 @@ final class AppState: ObservableObject {
 
     // MARK: - Stats
 
-    private func recordKeystroke() {
+    /// Zero "today" once the date has moved past the saved stamp, so a count
+    /// from yesterday isn't shown as today's.
+    private func rollOverDayIfNeeded() {
         let stamp = Self.dayStamp()
-        if stamp != todayStamp {
-            todayStamp = stamp
-            todayKeystrokes = 0
-            defaults.set(stamp, forKey: "statsTodayStamp")
-        }
+        guard stamp != todayStamp else { return }
+        todayStamp = stamp
+        todayKeystrokes = 0
+        defaults.set(stamp, forKey: "statsTodayStamp")
+        defaults.set(0, forKey: "statsToday")
+    }
+
+    private func recordKeystroke() {
+        rollOverDayIfNeeded()
         todayKeystrokes += 1
         totalKeystrokes += 1
         // UserDefaults writes hit an in-memory cache; persist every N strokes
@@ -350,6 +382,11 @@ final class AppState: ObservableObject {
     }
 
     private func applyOutputDevice() {
+        guard enabled else {
+            outputChangedWhileDisabled = true
+            return
+        }
+        outputChangedWhileDisabled = false
         if let uid = outputDeviceUID,
            let device = AudioDevices.outputDevices().first(where: { $0.uid == uid }) {
             engine.setOutputDevice(device.id)

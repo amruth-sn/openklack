@@ -75,8 +75,10 @@ def fetch(url: str, dest: Path) -> None:
     if dest.exists():
         return
     print(f"  GET {url}")
+    temp = dest.with_name(dest.name + ".tmp")
     with urllib.request.urlopen(url, timeout=60) as resp:
-        dest.write_bytes(resp.read())
+        temp.write_bytes(resp.read())
+    temp.replace(dest)
 
 
 def kbsim_manifest(pack_id: str, name: str, real_switch: str) -> dict:

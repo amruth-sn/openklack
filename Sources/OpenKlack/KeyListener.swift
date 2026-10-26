@@ -30,20 +30,28 @@ final class KeyListener {
         let mouseMask: NSEvent.EventTypeMask = [.leftMouseDown, .leftMouseUp,
                                                 .rightMouseDown, .rightMouseUp,
                                                 .otherMouseDown, .otherMouseUp]
-        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: keyMask) { [weak self] event in
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: keyMask, handler: { [weak self] event in
             self?.process(event)
-        } as Any)
-        monitors.append(NSEvent.addGlobalMonitorForEvents(matching: mouseMask) { [weak self] event in
+        }) {
+            monitors.append(monitor)
+        }
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             self?.process(event)
-        } as Any)
-        monitors.append(NSEvent.addLocalMonitorForEvents(matching: keyMask) { [weak self] event in
+        }) {
+            monitors.append(monitor)
+        }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: keyMask, handler: { [weak self] event in
             self?.process(event)
             return event
-        } as Any)
-        monitors.append(NSEvent.addLocalMonitorForEvents(matching: mouseMask) { [weak self] event in
+        }) {
+            monitors.append(monitor)
+        }
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: mouseMask, handler: { [weak self] event in
             self?.process(event)
             return event
-        } as Any)
+        }) {
+            monitors.append(monitor)
+        }
     }
 
     func stop() {
