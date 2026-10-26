@@ -251,7 +251,7 @@ final class AppState: ObservableObject {
                 return
             }
             guard enabled, !isRepeat, audible(keycode) else { return }
-            recordKeystroke()
+            // Sound first; stats and haptics can trail it.
             let info = KeyMap.info(for: keycode)
             if returnDing, KeyMap.returnKeycodes.contains(keycode) {
                 engine.playKey(keyClass: .enter, up: false, x: info.x)
@@ -262,6 +262,7 @@ final class AppState: ObservableObject {
             if hapticFeedback {
                 NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .now)
             }
+            recordKeystroke()
         case let .keyUp(keycode):
             if keycode == suppressNextKeyUp {
                 suppressNextKeyUp = nil

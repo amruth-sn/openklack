@@ -92,6 +92,7 @@ final class SoundEngine {
         if hwFormat.sampleRate > 0 {
             engine.connect(engine.mainMixerNode, to: engine.outputNode, format: hwFormat)
         }
+        requestLowLatencyIO()
         engine.prepare()
         do {
             try engine.start()
@@ -100,14 +101,45 @@ final class SoundEngine {
             return
         }
         reviveVoices()
-        klog.notice("engine restarted (hw \(hwFormat.sampleRate, privacy: .public) Hz)")
+        klog.notice("engine restarted (hw \(hwFormat.sampleRate, privacy: .public) Hz, output latency \(self.outputLatency * 1000, privacy: .public) ms)")
     }
 
     func start() throws {
         guard !engine.isRunning else { return }
+        requestLowLatencyIO()
         try engine.start()
         reviveVoices()
-        klog.notice("engine started")
+        klog.notice("engine started (output latency \(self.outputLatency * 1000, privacy: .public) ms)")
+    }
+
+    /// Hardware I/O cycle we ask for, in frames. The HAL default (512 frames,
+    /// ~10.7 ms at 48 kHz) suits music playback, but a keystroke scheduled
+    /// mid-cycle waits for the next one and then a full cycle more before it
+    /// reaches the device: ~17 ms median from scheduleBuffer() to render.
+    /// 128 frames brings that to ~5 ms and is still trivial for this graph.
+    private static let ioBufferFrames: UInt32 = 128
+
+    /// Applies to this process's I/O only; the device keeps serving other
+    /// apps at their own sizes. Must run before the engine starts.
+    private func requestLowLatencyIO() {
+        guard let unit = engine.outputNode.audioUnit else { return }
+        var frames = Self.ioBufferFrames
+        let err = AudioUnitSetProperty(unit,
+                                       kAudioDevicePropertyBufferFrameSize,
+                                       kAudioUnitScope_Global,
+                                       0,
+                                       &frames,
+                                       UInt32(MemoryLayout<UInt32>.size))
+        if err != noErr {
+            klog.error("could not set I/O buffer to \(frames, privacy: .public) frames: \(err, privacy: .public)")
+        }
+    }
+
+    /// Time from a sample leaving the engine to it reaching the speaker:
+    /// the device's own latency plus its safety offset. Bluetooth outputs
+    /// report well over 100 ms here, which no buffer setting can recover.
+    var outputLatency: TimeInterval {
+        engine.outputNode.presentationLatency
     }
 
     /// After any engine stop→start cycle, player nodes report a stale

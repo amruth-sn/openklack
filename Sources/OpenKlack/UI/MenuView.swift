@@ -172,16 +172,27 @@ struct MenuView: View {
     }
 
     private var outputDevicePicker: some View {
-        Picker("Output", selection: Binding(
-            get: { state.outputDeviceUID ?? "" },
-            set: { state.outputDeviceUID = $0.isEmpty ? nil : $0 }
-        )) {
-            Text("System Default").tag("")
-            ForEach(devices) { device in
-                Text(device.name).tag(device.uid)
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("Output", selection: Binding(
+                get: { state.outputDeviceUID ?? "" },
+                set: { state.outputDeviceUID = $0.isEmpty ? nil : $0 }
+            )) {
+                Text("System Default").tag("")
+                ForEach(devices) { device in
+                    Text(device.name).tag(device.uid)
+                }
+            }
+            .font(.callout)
+            // Bluetooth headphones buffer ~100–250 ms on their own; say so,
+            // since it reads as the app lagging.
+            let latencyMs = Int((state.engine.outputLatency * 1000).rounded())
+            if latencyMs >= 40 {
+                Text("This output delays sound by ~\(latencyMs) ms (typical for Bluetooth). Speakers or wired headphones respond instantly.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .font(.callout)
     }
 
     private var footer: some View {
