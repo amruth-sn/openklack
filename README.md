@@ -4,7 +4,7 @@ Satisfying mechanical-keyboard sound with every keystroke — a free, open-sourc
 macOS menu bar app inspired by [Klack](https://tryklack.com/).
 
 Native Swift + SwiftUI + AVAudioEngine. No Electron, no network, no analytics,
-no keystroke logging. The whole app bundle is **~1.6 MB**.
+no keystroke logging. The whole app bundle is **~2 MB**.
 
 > OpenKlack is an independent project, not affiliated with or endorsed by
 > Klack or Henrik Ruscon. If you want the original (it's great), buy it —

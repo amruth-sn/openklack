@@ -6,7 +6,7 @@ BUNDLE := dist/$(APP).app
 # keep the grant across rebuilds.
 CODESIGN_ID ?= -
 
-.PHONY: all build bundle test sounds clean run
+.PHONY: all build bundle test sounds icon clean run
 
 all: bundle
 
@@ -19,6 +19,7 @@ bundle: build
 	cp $(BUILD)/$(APP) $(BUNDLE)/Contents/MacOS/
 	cp Resources/Info.plist $(BUNDLE)/Contents/
 	cp -R Resources/Sounds $(BUNDLE)/Contents/Resources/Sounds
+	cp Resources/AppIcon.icns $(BUNDLE)/Contents/Resources/
 	codesign --force --sign "$(CODESIGN_ID)" $(BUNDLE)
 	@du -sh $(BUNDLE)
 	@echo "note: if this replaced an already-granted build, re-grant Accessibility:"
@@ -27,6 +28,10 @@ bundle: build
 # Rebuild the sound catalog from upstream sources (requires uv + network).
 sounds:
 	uv run --with soundfile,numpy scripts/build_sounds.py
+
+# Re-render Resources/AppIcon.icns from scripts/make_icon.swift.
+icon:
+	swift scripts/make_icon.swift Resources/AppIcon.icns
 
 # Headless audio smoke test: decodes and plays every pack.
 test: bundle

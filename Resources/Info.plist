@@ -8,6 +8,8 @@
     <string>OpenKlack</string>
     <key>CFBundleIdentifier</key>
     <string>dev.openklack.OpenKlack</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleExecutable</key>
     <string>OpenKlack</string>
     <key>CFBundlePackageType</key>
